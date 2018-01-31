@@ -19,7 +19,6 @@ const FadePropTypes = PropTypes.shape(Fade.propTypes);
 const propTypes = {
   isOpen: PropTypes.bool,
   autoFocus: PropTypes.bool,
-  centered: PropTypes.bool,
   size: PropTypes.string,
   toggle: PropTypes.func,
   keyboard: PropTypes.bool,
@@ -39,7 +38,6 @@ const propTypes = {
   modalClassName: PropTypes.string,
   backdropClassName: PropTypes.string,
   contentClassName: PropTypes.string,
-  external: PropTypes.node,
   fade: PropTypes.bool,
   cssModule: PropTypes.object,
   zIndex: PropTypes.oneOfType([
@@ -55,7 +53,6 @@ const propsToOmit = Object.keys(propTypes);
 const defaultProps = {
   isOpen: false,
   autoFocus: true,
-  centered: false,
   role: 'dialog',
   backdrop: true,
   keyboard: true,
@@ -83,10 +80,6 @@ class Modal extends React.Component {
     this.onOpened = this.onOpened.bind(this);
     this.onClosed = this.onClosed.bind(this);
 
-    this.state = {
-      isOpen: props.isOpen,
-    };
-
     if (props.isOpen) {
       this.init();
     }
@@ -96,28 +89,20 @@ class Modal extends React.Component {
     if (this.props.onEnter) {
       this.props.onEnter();
     }
-
-    if (this.state.isOpen && this.props.autoFocus) {
-      this.setFocus();
-    }
-
-    this._isMounted = true;
   }
 
-  componentWillReceiveProps(nextProps) {
+  componentWillUpdate(nextProps) {
     if (nextProps.isOpen && !this.props.isOpen) {
-      this.setState({ isOpen: nextProps.isOpen });
-    }
-  }
-
-  componentWillUpdate(nextProps, nextState) {
-    if (nextState.isOpen && !this.state.isOpen) {
       this.init();
     }
   }
 
-  componentDidUpdate(prevProps, prevState) {
-    if (this.props.autoFocus && this.state.isOpen && !prevState.isOpen) {
+  componentDidUpdate(prevProps) {
+    if (!this.props.isOpen && prevProps.isOpen) {
+      this.destroy();
+    }
+
+    if (this.props.autoFocus && this.props.isOpen && !prevProps.isOpen) {
       this.setFocus();
     }
   }
@@ -127,11 +112,9 @@ class Modal extends React.Component {
       this.props.onExit();
     }
 
-    if (this.state.isOpen) {
+    if (this.props.isOpen) {
       this.destroy();
     }
-
-    this._isMounted = false;
   }
 
   onOpened(node, isAppearing) {
@@ -143,11 +126,6 @@ class Modal extends React.Component {
     // so all methods get called before it is unmounted
     this.props.onClosed();
     (this.props.modalTransition.onExited || noop)(node);
-    this.destroy();
-
-    if (this._isMounted) {
-      this.setState({ isOpen: false });
-    }
   }
 
   setFocus() {
@@ -157,8 +135,7 @@ class Modal extends React.Component {
   }
 
   handleBackdropClick(e) {
-    e.stopPropagation();
-    if (!this.props.isOpen || this.props.backdrop !== true) return;
+    if (this.props.backdrop !== true) return;
 
     const container = this._dialog;
 
@@ -168,7 +145,7 @@ class Modal extends React.Component {
   }
 
   handleEscape(e) {
-    if (this.props.isOpen && this.props.keyboard && e.keyCode === 27 && this.props.toggle) {
+    if (this.props.keyboard && e.keyCode === 27 && this.props.toggle) {
       this.props.toggle();
     }
   }
@@ -184,34 +161,31 @@ class Modal extends React.Component {
 
     document.body.appendChild(this._element);
 
-    document.body.className = classNames(
+    document.body.className = mapToCssModules(classNames(
       document.body.className,
-      mapToCssModules('modal-open', this.props.cssModule)
-    );
+      'modal-open'
+    ), this.props.cssModule);
   }
 
   destroy() {
     document.body.removeChild(this._element);
     this._element = null;
 
-    const modalOpenClassName = mapToCssModules('modal-open', this.props.cssModule);
     // Use regex to prevent matching `modal-open` as part of a different class, e.g. `my-modal-opened`
-    const modalOpenClassNameRegex = new RegExp(`(^| )${modalOpenClassName}( |$)`);
-    document.body.className = document.body.className.replace(modalOpenClassNameRegex, ' ').trim();
-
+    const classRegex = new RegExp(`(^| )${mapToCssModules('modal-open')}( |$)`);
+    const classes = document.body.className.replace(classRegex, ' ');
+    document.body.className = mapToCssModules(classNames(classes).trim(), this.props.cssModule);
     setScrollbarWidth(this._originalBodyPadding);
   }
 
   renderModalDialog() {
     const attributes = omit(this.props, propsToOmit);
-    const dialogBaseClass = 'modal-dialog';
 
     return (
       <div
         {...attributes}
-        className={mapToCssModules(classNames(dialogBaseClass, this.props.className, {
-          [`modal-${this.props.size}`]: this.props.size,
-          [`${dialogBaseClass}-centered`]: this.props.centered,
+        className={mapToCssModules(classNames('modal-dialog', this.props.className, {
+          [`modal-${this.props.size}`]: this.props.size
         }), this.props.cssModule)}
         role="document"
         ref={(c) => {
@@ -231,7 +205,7 @@ class Modal extends React.Component {
   }
 
   render() {
-    if (this.state.isOpen) {
+    if (this.props.isOpen) {
       const {
         wrapClassName,
         modalClassName,
@@ -240,12 +214,11 @@ class Modal extends React.Component {
         isOpen,
         backdrop,
         role,
-        labelledBy,
-        external,
+        labelledBy
       } = this.props;
 
       const modalAttributes = {
-        onClick: this.handleBackdropClick,
+        onClickCapture: this.handleBackdropClick,
         onKeyUp: this.handleEscape,
         style: { display: 'block' },
         'aria-labelledby': labelledBy,
@@ -279,7 +252,6 @@ class Modal extends React.Component {
               cssModule={cssModule}
               className={mapToCssModules(classNames('modal', modalClassName), cssModule)}
             >
-              {external}
               {this.renderModalDialog()}
             </Fade>
             <Fade
